@@ -59,7 +59,8 @@ options:
     required: false
 
 # informational: requirements for nodes
-requirements: [ xmpp ]
+requirements:
+    - python xmpp (xmpppy)
 author: "Brian Coca (@bcoca)"
 '''
 
@@ -100,7 +101,7 @@ def main():
     module = AnsibleModule(
         argument_spec=dict(
             user=dict(required=True),
-            password=dict(required=True),
+            password=dict(required=True, no_log=True),
             to=dict(required=True),
             msg=dict(required=True),
             host=dict(required=False),
@@ -111,7 +112,7 @@ def main():
     )
 
     if not HAS_XMPP:
-        module.fail_json(msg="xmpp is not installed")
+        module.fail_json(msg="The required python xmpp library (xmpppy) is not installed")
 
     jid = xmpp.JID(module.params['user'])
     user = jid.getNode()
@@ -133,7 +134,7 @@ def main():
     msg = xmpp.protocol.Message(body=module.params['msg'])
 
     try:
-        conn=xmpp.Client(server)
+        conn=xmpp.Client(server, debug=[])
         if not conn.connect(server=(host,port)):
             module.fail_json(rc=1, msg='Failed to connect to server: %s' % (server))
         if not conn.auth(user,password,'Ansible'):

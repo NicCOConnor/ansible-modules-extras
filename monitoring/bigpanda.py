@@ -1,4 +1,20 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+# This file is part of Ansible
+#
+# Ansible is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Ansible is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
 DOCUMENTATION = '''
 ---
@@ -6,7 +22,7 @@ module: bigpanda
 author: "Hagai Kariti (@hkariti)"
 short_description: Notify BigPanda about deployments
 version_added: "1.8"
-description: 
+description:
    - Notify BigPanda when deployments start and end (successfully or not). Returns a deployment object containing all the parameters for future module calls.
 options:
   component:
@@ -93,7 +109,7 @@ def main():
         argument_spec=dict(
             component=dict(required=True, aliases=['name']),
             version=dict(required=True),
-            token=dict(required=True),
+            token=dict(required=True, no_log=True),
             state=dict(required=True, choices=['started', 'finished', 'failed']),
             hosts=dict(required=False, default=[socket.gethostname()], aliases=['host']),
             env=dict(required=False),

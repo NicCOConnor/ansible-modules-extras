@@ -26,11 +26,6 @@ options:
     description:
       - "Name of the s3 bucket."
     required: true
-  region:
-    description:
-     - "AWS region to create the bucket in. If not set then the value of the AWS_REGION and EC2_REGION environment variables are checked, followed by the aws_region and ec2_region settings in the Boto config file.  If none of those are set the region defaults to the S3 Location: US Standard."
-    required: false
-    default: null
   state:
     description:
       - "Enable or disable logging."
@@ -47,8 +42,9 @@ options:
       - "The prefix that should be prepended to the generated log files written to the target_bucket."
     required: false
     default: ""
-
-extends_documentation_fragment: aws
+extends_documentation_fragment:
+    - aws
+    - ec2
 '''
 
 EXAMPLES = '''
@@ -65,7 +61,7 @@ EXAMPLES = '''
   s3_logging:
     name: mywebsite.com
     state: absent
-    
+
 '''
 
 try:
@@ -78,21 +74,21 @@ except ImportError:
 
 
 def compare_bucket_logging(bucket, target_bucket, target_prefix):
-    
+
     bucket_log_obj = bucket.get_logging_status()
     if bucket_log_obj.target != target_bucket or bucket_log_obj.prefix != target_prefix:
         return False
     else:
         return True
-    
+
 
 def enable_bucket_logging(connection, module):
-    
+
     bucket_name = module.params.get("name")
     target_bucket = module.params.get("target_bucket")
     target_prefix = module.params.get("target_prefix")
     changed = False
-    
+
     try:
         bucket = connection.get_bucket(bucket_name)
     except S3ResponseError as e:
@@ -115,15 +111,15 @@ def enable_bucket_logging(connection, module):
 
     except S3ResponseError as e:
         module.fail_json(msg=e.message)
-    
+
     module.exit_json(changed=changed)
-    
-    
+
+
 def disable_bucket_logging(connection, module):
-    
+
     bucket_name = module.params.get("name")
     changed = False
-    
+
     try:
         bucket = connection.get_bucket(bucket_name)
         if not compare_bucket_logging(bucket, None, None):
@@ -131,12 +127,12 @@ def disable_bucket_logging(connection, module):
             changed = True
     except S3ResponseError as e:
         module.fail_json(msg=e.message)
-   
+
     module.exit_json(changed=changed)
-    
-    
+
+
 def main():
-    
+
     argument_spec = ec2_argument_spec()
     argument_spec.update(
         dict(
@@ -146,16 +142,16 @@ def main():
             state = dict(required=False, default='present', choices=['present', 'absent'])
         )
     )
-    
+
     module = AnsibleModule(argument_spec=argument_spec)
 
     if not HAS_BOTO:
         module.fail_json(msg='boto required for this module')
-    
+
     region, ec2_url, aws_connect_params = get_aws_connection_info(module)
 
     if region in ('us-east-1', '', None):
-    # S3ism for the US Standard region
+        # S3ism for the US Standard region
         location = Location.DEFAULT
     else:
         # Boto uses symbolic names for locations but region strings will
@@ -166,9 +162,8 @@ def main():
         # use this as fallback because connect_to_region seems to fail in boto + non 'classic' aws accounts in some cases
         if connection is None:
             connection = boto.connect_s3(**aws_connect_params)
-    except (boto.exception.NoAuthHandlerFound, StandardError), e:
+    except (boto.exception.NoAuthHandlerFound, AnsibleAWSError), e:
         module.fail_json(msg=str(e))
-
 
     state = module.params.get("state")
 

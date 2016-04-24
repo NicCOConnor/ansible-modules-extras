@@ -188,7 +188,7 @@ def main():
             state=dict(default='present', choices=['present', 'absent']),
             zone=dict(default='us-central1-a'),
             service_account_email=dict(),
-            pem_file=dict(),
+            pem_file=dict(type='path'),
             project_id=dict(),
         )
     )
@@ -219,7 +219,6 @@ def main():
         changed, tags_changed = remove_tags(gce, module, instance_name, tags)
 
     module.exit_json(changed=changed, instance_name=instance_name, tags=tags_changed, zone=zone)
-    sys.exit(0)
 
 # import module snippets
 from ansible.module_utils.basic import *

@@ -71,6 +71,18 @@ options:
           - the port on which the consul agent is running
         required: false
         default: 8500
+    scheme:
+        description:
+          - the protocol scheme on which the consul agent is running
+        required: false
+        default: http
+        version_added: "2.1"
+    validate_certs:
+        description:
+          - whether to verify the tls certificate of the consul agent
+        required: false
+        default: True
+        version_added: "2.1"
     notes:
         description:
           - Notes to attach to check when registering it.
@@ -123,6 +135,22 @@ options:
             is supplied, m will be used by default e.g. 1 will be 1m
         required: false
         default: None
+    http:
+        description:
+          - checks can be registered with an http endpoint. This means that consul
+            will check that the http endpoint returns a successful http status.
+            Interval must also be provided with this option.
+        required: false
+        default: None
+        version_added: "2.0"
+    timeout:
+        description:
+          - A custom HTTP check timeout. The consul default is 10 seconds.
+            Similar to the interval this is a number with a s or m suffix to
+            signify the units of seconds or minutes, e.g. 15s or 1m.
+        required: false
+        default: None
+        version_added: "2.0"
     token:
         description:
           - the token key indentifying an ACL rule set. May be required to register services.
@@ -133,19 +161,26 @@ options:
 EXAMPLES = '''
   - name: register nginx service with the local consul agent
     consul:
-      name: nginx
+      service_name: nginx
       service_port: 80
 
   - name: register nginx service with curl check
     consul:
-      name: nginx
+      service_name: nginx
       service_port: 80
       script: "curl http://localhost"
       interval: 60s
 
-  - name: register nginx with some service tags
+  - name: register nginx with an http check
     consul:
       name: nginx
+      service_port: 80
+      interval: 60s
+      http: /status
+
+  - name: register nginx with some service tags
+    consul:
+      service_name: nginx
       service_port: 80
       tags:
         - prod
@@ -153,7 +188,7 @@ EXAMPLES = '''
 
   - name: remove nginx service
     consul:
-      name: nginx
+      service_name: nginx
       state: absent
 
   - name: create a node level check to test disk usage
@@ -166,11 +201,6 @@ EXAMPLES = '''
 '''
 
 import sys
-
-try:
-    import json
-except ImportError:
-    import simplejson as json
 
 try:
     import consul
@@ -210,8 +240,7 @@ def remove(module):
     service_id = module.params.get('service_id') or module.params.get('service_name')
     check_id = module.params.get('check_id') or module.params.get('check_name')
     if not (service_id or check_id):
-        module.fail_json(msg='services and checks are removed by id or name.'\
-                            ' please supply a service id/name or a check id/name')
+        module.fail_json(msg='services and checks are removed by id or name. please supply a service id/name or a check id/name')
     if service_id:
         remove_service(module, service_id)
     else:
@@ -224,8 +253,7 @@ def add_check(module, check):
     Without this we can't compare to the supplied check and so we must assume
     a change. '''
     if not check.name:
-        module.fail_json(msg='a check name is required for a node level check,'\
-                                ' one not attached to a service')
+        module.fail_json(msg='a check name is required for a node level check, one not attached to a service')
 
     consul_api = get_consul_api(module)
     check.register(consul_api)
@@ -235,7 +263,9 @@ def add_check(module, check):
                      check_name=check.name,
                      script=check.script,
                      interval=check.interval,
-                     ttl=check.ttl)
+                     ttl=check.ttl,
+                     http=check.http,
+                     timeout=check.timeout)
 
 
 def remove_check(module, check_id):
@@ -290,6 +320,8 @@ def remove_service(module, service_id):
 def get_consul_api(module, token=None):
     return consul.Consul(host=module.params.get('host'),
                          port=module.params.get('port'),
+                         scheme=module.params.get('scheme'),
+                         validate_certs=module.params.get('validate_certs'),
                          token=module.params.get('token'))
 
 
@@ -302,12 +334,11 @@ def get_service_by_id(consul_api, service_id):
 
 def parse_check(module):
 
-    if module.params.get('script') and module.params.get('ttl'):
+    if len(filter(None, [module.params.get('script'), module.params.get('ttl'), module.params.get('http')])) > 1:
         module.fail_json(
-            msg='check are either script or ttl driven, supplying both does'\
-            ' not make sense')
+            msg='check are either script, http or ttl driven, supplying more than one does not make sense')
 
-    if module.params.get('check_id') or module.params.get('script') or module.params.get('ttl'):
+    if module.params.get('check_id') or module.params.get('script') or module.params.get('ttl') or module.params.get('http'):
 
        return ConsulCheck(
             module.params.get('check_id'),
@@ -317,7 +348,9 @@ def parse_check(module):
             module.params.get('script'),
             module.params.get('interval'),
             module.params.get('ttl'),
-            module.params.get('notes')
+            module.params.get('notes'),
+            module.params.get('http'),
+            module.params.get('timeout')
         )
 
 
@@ -332,10 +365,7 @@ def parse_service(module):
         )
     elif module.params.get('service_name') and not module.params.get('service_port'):
 
-        module.fail_json(
-            msg="service_name supplied but no service_port, a port is required"\
-                " to configure a service. Did you configure the 'port' "\
-                "argument meaning 'service_port'?")
+        module.fail_json( msg="service_name supplied but no service_port, a port is required to configure a service. Did you configure the 'port' argument meaning 'service_port'?")
 
 
 class ConsulService():
@@ -357,14 +387,13 @@ class ConsulService():
     def register(self, consul_api):
         if len(self.checks) > 0:
             check = self.checks[0]
+
             consul_api.agent.service.register(
                 self.name,
                 service_id=self.id,
                 port=self.port,
                 tags=self.tags,
-                script=check.script,
-                interval=check.interval,
-                ttl=check.ttl)
+                check=check.check)
         else:
             consul_api.agent.service.register(
                 self.name,
@@ -405,18 +434,34 @@ class ConsulService():
 class ConsulCheck():
 
     def __init__(self, check_id, name, node=None, host='localhost',
-                    script=None, interval=None, ttl=None, notes=None):
+                    script=None, interval=None, ttl=None, notes=None, http=None, timeout=None):
         self.check_id = self.name = name
         if check_id:
             self.check_id = check_id
-        self.script = script
-        self.interval = self.validate_duration('interval', interval)
-        self.ttl = self.validate_duration('ttl', ttl)
         self.notes = notes
         self.node = node
         self.host = host
 
-        
+        self.interval = self.validate_duration('interval', interval)
+        self.ttl = self.validate_duration('ttl', ttl)
+        self.script = script
+        self.http = http
+        self.timeout = self.validate_duration('timeout', timeout)
+
+        self.check = None
+
+        if script:
+            self.check = consul.Check.script(script, self.interval)
+
+        if ttl:
+            self.check = consul.Check.ttl(self.ttl)
+
+        if http:
+            if interval == None:
+                raise Exception('http check must specify interval')
+
+            self.check = consul.Check.http(http, self.interval, self.timeout)
+
 
     def validate_duration(self, name, duration):
         if duration:
@@ -428,9 +473,8 @@ class ConsulCheck():
 
     def register(self, consul_api):
         consul_api.agent.check.register(self.name, check_id=self.check_id,
-                                        script=self.script,
-                                        interval=self.interval,
-                                        ttl=self.ttl, notes=self.notes)
+                                        notes=self.notes,
+                                        check=self.check)
 
     def __eq__(self, other):
         return (isinstance(other, self.__class__)
@@ -452,6 +496,8 @@ class ConsulCheck():
         self._add(data, 'host')
         self._add(data, 'interval')
         self._add(data, 'ttl')
+        self._add(data, 'http')
+        self._add(data, 'timeout')
         return data
 
     def _add(self, data, key, attr=None):
@@ -464,14 +510,15 @@ class ConsulCheck():
 
 def test_dependencies(module):
     if not python_consul_installed:
-        module.fail_json(msg="python-consul required for this module. "\
-              "see http://python-consul.readthedocs.org/en/latest/#installation")
+        module.fail_json(msg="python-consul required for this module. see http://python-consul.readthedocs.org/en/latest/#installation")
 
 def main():
     module = AnsibleModule(
         argument_spec=dict(
             host=dict(default='localhost'),
             port=dict(default=8500, type='int'),
+            scheme=dict(required=False, default='http'),
+            validate_certs=dict(required=False, default=True, type='bool'),
             check_id=dict(required=False),
             check_name=dict(required=False),
             check_node=dict(required=False),
@@ -484,14 +531,16 @@ def main():
             state=dict(default='present', choices=['present', 'absent']),
             interval=dict(required=False, type='str'),
             ttl=dict(required=False, type='str'),
+            http=dict(required=False, type='str'),
+            timeout=dict(required=False, type='str'),
             tags=dict(required=False, type='list'),
-            token=dict(required=False)
+            token=dict(required=False, no_log=True)
         ),
         supports_check_mode=False,
     )
-    
+
     test_dependencies(module)
-        
+
     try:
         register_with_consul(module)
     except ConnectionError, e:

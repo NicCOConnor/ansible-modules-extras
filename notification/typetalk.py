@@ -1,6 +1,20 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-
+#
+# This file is part of Ansible
+#
+# Ansible is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Ansible is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 DOCUMENTATION = '''
 ---
 module: typetalk
@@ -58,14 +72,14 @@ def do_request(module, url, params, headers=None):
         raise exc
     return r
 
-def get_access_token(client_id, client_secret):
+def get_access_token(module, client_id, client_secret):
     params = {
         'client_id': client_id,
         'client_secret': client_secret,
         'grant_type': 'client_credentials',
         'scope': 'topic.post'
     }
-    res = do_request('https://typetalk.in/oauth2/access_token', params)
+    res = do_request(module, 'https://typetalk.in/oauth2/access_token', params)
     return json.load(res)['access_token']
 
 
@@ -74,7 +88,7 @@ def send_message(module, client_id, client_secret, topic, msg):
     send message to typetalk
     """
     try:
-        access_token = get_access_token(client_id, client_secret)
+        access_token = get_access_token(module, client_id, client_secret)
         url = 'https://typetalk.in/api/v1/topics/%d' % topic
         headers = {
             'Authorization': 'Bearer %s' % access_token,
@@ -90,7 +104,7 @@ def main():
     module = AnsibleModule(
         argument_spec=dict(
             client_id=dict(required=True),
-            client_secret=dict(required=True),
+            client_secret=dict(required=True, no_log=True),
             topic=dict(required=True, type='int'),
             msg=dict(required=True),
         ),

@@ -41,46 +41,57 @@ requirements:
     - lxml
 options:
     group_id:
-        description: The Maven groupId coordinate
+        description:
+            - The Maven groupId coordinate
         required: true
     artifact_id:
-        description: The maven artifactId coordinate
+        description:
+            - The maven artifactId coordinate
         required: true
     version:
-        description: The maven version coordinate
+        description:
+            - The maven version coordinate
         required: false
         default: latest
     classifier:
-        description: The maven classifier coordinate
+        description:
+            - The maven classifier coordinate
         required: false
         default: null
     extension:
-        description: The maven type/extension coordinate
+        description:
+            - The maven type/extension coordinate
         required: false
         default: jar
     repository_url:
-        description: The URL of the Maven Repository to download from
+        description:
+            - The URL of the Maven Repository to download from
         required: false
         default: http://repo1.maven.org/maven2
     username:
-        description: The username to authenticate as to the Maven Repository
+        description:
+            - The username to authenticate as to the Maven Repository
         required: false
         default: null
     password:
-        description: The password to authenticate with to the Maven Repository
+        description:
+            - The password to authenticate with to the Maven Repository
         required: false
         default: null
     dest:
-        description: The path where the artifact should be written to
+        description:
+            - The path where the artifact should be written to
         required: true
         default: false
     state:
-        description: The desired state of the artifact
+        description:
+            - The desired state of the artifact
         required: true
         default: present
         choices: [present,absent]
     validate_certs:
-        description: If C(no), SSL certificates will not be validated. This should only be set to C(no) when no other option exists.
+        description:
+            - If C(no), SSL certificates will not be validated. This should only be set to C(no) when no other option exists.
         required: false
         default: 'yes'
         choices: ['yes', 'no']
@@ -88,11 +99,11 @@ options:
 '''
 
 EXAMPLES = '''
-# Download the latest version of the commons-collections artifact from Maven Central
-- maven_artifact: group_id=org.apache.commons artifact_id=commons-collections dest=/tmp/commons-collections-latest.jar
+# Download the latest version of the JUnit framework artifact from Maven Central
+- maven_artifact: group_id=junit artifact_id=junit dest=/tmp/junit-latest.jar
 
-# Download Apache Commons-Collections 3.2 from Maven Central
-- maven_artifact: group_id=org.apache.commons artifact_id=commons-collections version=3.2 dest=/tmp/commons-collections-3.2.jar
+# Download JUnit 4.11 from Maven Central
+- maven_artifact: group_id=junit artifact_id=junit version=4.11 dest=/tmp/junit-4.11.jar
 
 # Download an artifact from a private repository requiring authentication
 - maven_artifact: group_id=com.company artifact_id=library-name repository_url=https://repo.company.com/maven username=user password=pass dest=/tmp/library-name-latest.jar
@@ -191,7 +202,10 @@ class MavenDownloader:
             buildNumber = xml.xpath("/metadata/versioning/snapshot/buildNumber/text()")[0]
             return self._uri_for_artifact(artifact, artifact.version.replace("SNAPSHOT", timestamp + "-" + buildNumber))
         else:
-            return self._uri_for_artifact(artifact)
+            if artifact.version == "latest":
+                artifact.version = self._find_latest_version_available(artifact)
+
+            return self._uri_for_artifact(artifact, artifact.version)
 
     def _uri_for_artifact(self, artifact, version=None):
         if artifact.is_snapshot() and not version:
@@ -283,14 +297,14 @@ def main():
         argument_spec = dict(
             group_id = dict(default=None),
             artifact_id = dict(default=None),
-            version = dict(default=None),
+            version = dict(default="latest"),
             classifier = dict(default=None),
-            extension = dict(default=None),
+            extension = dict(default='jar'),
             repository_url = dict(default=None),
             username = dict(default=None),
-            password = dict(default=None),
+            password = dict(default=None, no_log=True),
             state = dict(default="present", choices=["present","absent"]), # TODO - Implement a "latest" state
-            dest = dict(default=None),
+            dest = dict(type="path", default=None),
             validate_certs = dict(required=False, default=True, type='bool'),
         )
     )
@@ -309,7 +323,8 @@ def main():
     if not repository_url:
         repository_url = "http://repo1.maven.org/maven2"
 
-    downloader = MavenDownloader(module, repository_url, repository_username, repository_password)
+    #downloader = MavenDownloader(module, repository_url, repository_username, repository_password)
+    downloader = MavenDownloader(module, repository_url)
 
     try:
         artifact = Artifact(group_id, artifact_id, version, classifier, extension)
@@ -319,7 +334,7 @@ def main():
     prev_state = "absent"
     if os.path.isdir(dest):
         dest = dest + "/" + artifact_id + "-" + version + "." + extension
-    if os.path.lexists(dest):
+    if os.path.lexists(dest) and downloader.verify_md5(dest, downloader.find_uri_for_artifact(artifact) + '.md5'):
         prev_state = "present"
     else:
         path = os.path.dirname(dest)

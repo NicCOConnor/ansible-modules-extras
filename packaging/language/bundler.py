@@ -140,15 +140,15 @@ def main():
         argument_spec=dict(
                 executable=dict(default=None, required=False),
                 state=dict(default='present', required=False, choices=['present', 'latest']),
-                chdir=dict(default=None, required=False),
+                chdir=dict(default=None, required=False, type='path'),
                 exclude_groups=dict(default=None, required=False, type='list'),
                 clean=dict(default=False, required=False, type='bool'),
-                gemfile=dict(default=None, required=False),
+                gemfile=dict(default=None, required=False, type='path'),
                 local=dict(default=False, required=False, type='bool'),
                 deployment_mode=dict(default=False, required=False, type='bool'),
                 user_install=dict(default=True, required=False, type='bool'),
-                gem_path=dict(default=None, required=False),
-                binstub_directory=dict(default=None, required=False),
+                gem_path=dict(default=None, required=False, type='path'),
+                binstub_directory=dict(default=None, required=False, type='path'),
                 extra_args=dict(default=None, required=False),
             ),
         supports_check_mode=True
@@ -163,7 +163,7 @@ def main():
     local = module.params.get('local')
     deployment_mode = module.params.get('deployment_mode')
     user_install = module.params.get('user_install')
-    gem_path = module.params.get('gem_install_path')
+    gem_path = module.params.get('gem_path')
     binstub_directory = module.params.get('binstub_directory')
     extra_args = module.params.get('extra_args')
 

@@ -88,6 +88,18 @@ options:
           - the port on which the consul agent is running
         required: false
         default: 8500
+    scheme:
+        description:
+          - the protocol scheme on which the consul agent is running
+        required: false
+        default: http
+        version_added: "2.1"
+    validate_certs:
+        description:
+          - whether to verify the tls certificate of the consul agent
+        required: false
+        default: True
+        version_added: "2.1"
 """
 
 EXAMPLES = '''
@@ -113,8 +125,6 @@ EXAMPLES = '''
   consul_session: state=list
 '''
 
-import sys
-
 try:
     import consul
     from requests.exceptions import ConnectionError
@@ -138,10 +148,10 @@ def lookup_sessions(module):
     datacenter = module.params.get('datacenter')
 
     state = module.params.get('state')
-    consul = get_consul_api(module)
+    consul_client = get_consul_api(module)
     try:
         if state == 'list':
-            sessions_list = consul.session.list(dc=datacenter)
+            sessions_list = consul_client.session.list(dc=datacenter)
             #ditch the index, this can be grabbed from the results
             if sessions_list and sessions_list[1]:
                 sessions_list = sessions_list[1]
@@ -152,7 +162,7 @@ def lookup_sessions(module):
             if not node:
                 module.fail_json(
                   msg="node name is required to retrieve sessions for node")
-            sessions = consul.session.node(node, dc=datacenter)
+            sessions = consul_client.session.node(node, dc=datacenter)
             module.exit_json(changed=True,
                              node=node,
                              sessions=sessions)
@@ -162,7 +172,7 @@ def lookup_sessions(module):
                 module.fail_json(
                   msg="session_id is required to retrieve indvidual session info")
 
-            session_by_id = consul.session.info(session_id, dc=datacenter)
+            session_by_id = consul_client.session.info(session_id, dc=datacenter)
             module.exit_json(changed=True,
                              session_id=session_id,
                              sessions=session_by_id)
@@ -174,18 +184,16 @@ def lookup_sessions(module):
 def update_session(module):
 
     name = module.params.get('name')
-    session_id = module.params.get('id')
     delay = module.params.get('delay')
     checks = module.params.get('checks')
     datacenter = module.params.get('datacenter')
     node = module.params.get('node')
 
-    consul = get_consul_api(module)
-    changed = True
+    consul_client = get_consul_api(module)
 
     try:
         
-        session = consul.session.create(
+        session = consul_client.session.create(
             name=name,
             node=node,
             lock_delay=validate_duration('delay', delay),
@@ -209,11 +217,10 @@ def remove_session(module):
         module.fail_json(msg="""A session id must be supplied in order to
         remove a session.""")
 
-    consul = get_consul_api(module)
-    changed = False
+    consul_client = get_consul_api(module)
 
     try:
-        session = consul.session.destroy(session_id)
+        consul_client.session.destroy(session_id)
 
         module.exit_json(changed=True,
                          session_id=session_id)
@@ -244,11 +251,14 @@ def main():
         delay=dict(required=False,type='str', default='15s'),
         host=dict(default='localhost'),
         port=dict(default=8500, type='int'),
+        scheme=dict(required=False, default='http'),
+        validate_certs=dict(required=False, default=True),
         id=dict(required=False),
         name=dict(required=False),
         node=dict(required=False),
         state=dict(default='present',
-                   choices=['present', 'absent', 'info', 'node', 'list'])
+                   choices=['present', 'absent', 'info', 'node', 'list']),
+        datacenter=dict(required=False)
     )
 
     module = AnsibleModule(argument_spec, supports_check_mode=False)

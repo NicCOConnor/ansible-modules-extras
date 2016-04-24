@@ -28,7 +28,6 @@ author:
 '''
 
 import platform
-import sys
 import XenAPI
 
 EXAMPLES = '''
@@ -75,12 +74,9 @@ class XenServerFacts:
 
 
 def get_xenapi_session():
-    try:
-        session = XenAPI.xapi_local()
-        session.xenapi.login_with_password('', '')
-        return session
-    except XenAPI.Failure:
-        sys.exit(1)
+    session = XenAPI.xapi_local()
+    session.xenapi.login_with_password('', '')
+    return session
 
 
 def get_networks(session):
@@ -163,8 +159,10 @@ def main():
     module = AnsibleModule({})
 
     obj = XenServerFacts()
-    session = get_xenapi_session()
-
+    try:
+        session = get_xenapi_session()
+    except XenAPI.Failure, e:
+        module.fail_json(msg='%s' % e)
 
     data = {
         'xenserver_version': obj.version,
@@ -192,7 +190,6 @@ def main():
 
     module.exit_json(ansible=data)
 
-# this is magic, see lib/ansible/module_common.py
-#<<INCLUDE_ANSIBLE_MODULE_COMMON>>
+from ansible.module_utils.basic import *
 
 main()
