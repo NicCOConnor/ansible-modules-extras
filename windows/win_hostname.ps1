@@ -93,7 +93,7 @@ Function Mutually-Exclusive($params,[String[]]$mutually_exclusive)
 	$me_count = 0
 	foreach($me in $mutually_exclusive)
 	{
-		if($params.$me -ne $null)
+		if(Get-Param -obj $params -name $me -ne $null)
 		{
 			$me_count++
 		}
@@ -109,6 +109,61 @@ Function Mutually-Exclusive($params,[String[]]$mutually_exclusive)
 		Fail-Json $msg
 	}
 }
+function Get-Param($obj, $name, $default = $null, $resultobj, $failifempty=$false, $emptyattributefailmessage, $ValidateSet, $ValidateSetErrorMessage )
+{
+	if (Get-Command Get-AnsibleParam -ErrorAction SilentlyContinue)
+	{
+		Get-AnsibleParam -obj $obj -name $name -default $default -failifempty $failifempty -emptyattributefailmessage $emptyattributefailmessage -ValidateSet $ValidateSet -ValidateSetErrorMessage $ValidateSetErrorMessage
+	}
+	else
+	{
+		# Check if the provided Member $name exists in $obj and return it or the default. 
+	    Try
+	    {
+	        If (-not $obj.$name.GetType)
+	        {
+	            throw
+	        }
+
+	        if ($ValidateSet)
+	        {
+	            if ($ValidateSet -contains ($obj.$name))
+	            {
+	                $obj.$name    
+	            }
+	            Else
+	            {
+	                if ($ValidateSetErrorMessage -eq $null)
+	                {
+	                    #Auto-generated error should be sufficient in most use cases
+	                    $ValidateSetErrorMessage = "Argument $name needs to be one of $($ValidateSet -join ",") but was $($obj.$name)."
+	                }
+	                Fail-Json -obj $resultobj -message $ValidateSetErrorMessage
+	            }
+	        }
+	        Else
+	        {
+	            $obj.$name
+	        }
+	        
+	    }
+	    Catch
+	    {
+	        If ($failifempty -eq $false)
+	        {
+	            $default
+	        }
+	        Else
+	        {
+	            If (!$emptyattributefailmessage)
+	            {
+	                $emptyattributefailmessage = "Missing required argument: $name"
+	            }
+	            Fail-Json -obj $resultobj -message $emptyattributefailmessage
+	        }
+	    }
+	}
+}
 
 $params = Parse-Args $args;
 
@@ -120,13 +175,28 @@ $mutuallyExclusive = "domain","workgroup"
 $domain_requiredIf = "domain_user","domain_pass"
 $workgroup_requiredIf = "domain_user","domain_pass"
 
-Required-Args $params $required
-Required-Together $params $requiredTogether
-Mutually-Exclusive $params $mutuallyExclusive
-Required-If $params $params.workgroup $true $workgroup_requiredIf
-Required-If $params $params.domain $true $domain_requiredIf
+$name=$domain=$domain_user=$domain_pass=$workgroup=$restart=$null
 
-If($params.restart)
+$name = Get-Param -obj $params -name "name" -failifempty $false
+$domain = Get-Param -obj $params -name "domain" -failifempty $false
+$domain_user = Get-Param -obj $params -name "domain_user" -failifempty $false
+$domain_pass = Get-Param -obj $params -name "domain_pass" -failifempty $false
+$workgroup = Get-Param -obj $params -name "workgroup" -failifempty $false
+$restart = Get-Param -obj $params -name "restart" -failifempty $false
+
+Required-Args $params $required
+Mutually-Exclusive $params $mutuallyExclusive
+if($workgroup)
+{
+	Required-If $params $workgroup $true $workgroup_requiredIf
+}
+
+if($domain)
+{
+	Required-If $params $domain $true $domain_requiredIf
+}
+
+If($restart)
 {
 	$restart = $params.restart | ConvertTo-Bool
 }
@@ -134,13 +204,6 @@ Else
 {
 	$restart = $false
 }
-
-$name = $params.name
-$domain = $params.domain
-$domain_user = $params.domain_user
-$domain_pass = $params.domain_pass
-$workgroup = $params.workgroup
-$restart = $params.restart
 
 #Get the hostname and domain
 $curName = [System.Net.Dns]::GetHostName()

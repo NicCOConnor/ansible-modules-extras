@@ -50,18 +50,9 @@ options:
     aliases: []
   
 author: Nic O'Connor
-'''
 
-EXAMPLE = '''
-#Change the hostname of a windows machine
-$ansible -i hosts -m win_hostname -a "name=test restart=yes" windows
 
-#Hosts File Example
-#This playbook is great if you have an inventory of IP addresses and want to set the hostname 
-#[windows]
-#DC-01 ansible_ssh_host=192.168.33.10
-
-#Playbook example 
+#Playbook example
 ---
 - name: Change Hostname 
   hosts: windows
