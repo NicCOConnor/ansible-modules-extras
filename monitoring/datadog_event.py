@@ -90,12 +90,10 @@ datadog_event: title="Testing from ansible" text="Test!"
                tags=aa,bb,#host:{{ inventory_hostname }}
 '''
 
-import socket
-
 def main():
     module = AnsibleModule(
         argument_spec=dict(
-            api_key=dict(required=True),
+            api_key=dict(required=True, no_log=True),
             title=dict(required=True),
             text=dict(required=True),
             date_happened=dict(required=False, default=None, type='int'),
@@ -142,7 +140,7 @@ def post_event(module):
     headers = {"Content-Type": "application/json"}
 
     (response, info) = fetch_url(module, uri, data=json_body, headers=headers)
-    if info['status'] == 200:
+    if info['status'] == 202:
         response_body = response.read()
         response_json = module.from_json(response_body)
         if response_json['status'] == 'ok':

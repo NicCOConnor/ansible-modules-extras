@@ -213,6 +213,9 @@ def create_instance(module, proxmox, vmid, node, disk, storage, cpus, memory, sw
   if VZ_TYPE =='lxc':
       kwargs['cpulimit']=cpus
       kwargs['rootfs']=disk
+      if 'netif' in kwargs:
+        kwargs.update(kwargs['netif'])
+        del kwargs['netif']
   else:
       kwargs['cpus']=cpus
       kwargs['disk']=disk
@@ -287,7 +290,7 @@ def main():
       password = dict(no_log=True),
       hostname = dict(),
       ostemplate = dict(),
-      disk = dict(type='int', default=3),
+      disk = dict(type='str', default='3'),
       cpus = dict(type='int', default=1),
       memory = dict(type='int', default=512),
       swap = dict(type='int', default=0),
